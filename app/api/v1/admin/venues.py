@@ -7,7 +7,7 @@ from sqlalchemy import func
 from app.db.session import get_db
 from app.api.deps import get_current_admin_user
 from app.models.user import User
-from app.models.venue import Venue
+from app.models.venue import Venue, VenueType
 from app.models.hall import Hall
 from app.schemas.venue import (
     VenueCreate,
@@ -46,17 +46,25 @@ def create_venue(
 def list_venues(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    city: str | None = Query(None, description="Filter by city"),
+    venue_type: VenueType | None = Query(None, alias="type", description="Filter by venue type"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
+    filters = [Venue.is_active == True]
+    if city:
+        filters.append(Venue.city.ilike(f"%{city}%"))
+    if venue_type:
+        filters.append(Venue.type == venue_type)
+
     base_query = (
         db.query(Venue, func.count(Hall.id).label("halls_count"))
         .outerjoin(Hall, (Hall.venue_id == Venue.id) & (Hall.is_active == True))
-        .filter(Venue.is_active == True)
+        .filter(*filters)
         .group_by(Venue.id)
     )
 
-    total = db.query(func.count(Venue.id)).filter(Venue.is_active == True).scalar()
+    total = db.query(func.count(Venue.id)).filter(*filters).scalar()
 
     rows = base_query.order_by(Venue.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
 

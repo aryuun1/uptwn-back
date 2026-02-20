@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(sort:*)"
     ]
   }
 }
