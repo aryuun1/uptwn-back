@@ -332,5 +332,9 @@ def delete_listing(
         raise HTTPException(status_code=404, detail="Listing not found")
 
     listing.status = "inactive"
+    db.query(TimeSlot).filter(
+        TimeSlot.listing_id == id,
+        TimeSlot.is_active == True,
+    ).update({"is_active": False}, synchronize_session="fetch")
     db.commit()
     return {"id": str(id), "status": "inactive"}

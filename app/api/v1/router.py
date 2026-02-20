@@ -25,6 +25,7 @@ from app.api.v1.public.reviews import router as reviews_router
 
 # Admin
 from app.api.v1.admin.venues import router as venues_router, hall_router
+from app.api.v1.admin.seats import seats_router, seat_router
 from app.api.v1.admin.titles import router as titles_router, listing_router
 from app.api.v1.admin.time_slots import (
     router as time_slot_router,
@@ -58,6 +59,8 @@ api_router.include_router(reviews_router)
 # --- Admin ---
 api_router.include_router(venues_router)
 api_router.include_router(hall_router)
+api_router.include_router(seats_router)
+api_router.include_router(seat_router)
 api_router.include_router(titles_router)
 api_router.include_router(listing_router)
 api_router.include_router(time_slot_router)
