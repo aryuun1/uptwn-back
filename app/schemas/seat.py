@@ -1,6 +1,6 @@
 
-from typing import Optional, List
-from pydantic import BaseModel, UUID4
+from typing import Annotated, Optional, List
+from pydantic import BaseModel, Field, UUID4
 from decimal import Decimal
 from datetime import datetime
 
@@ -72,7 +72,7 @@ class SeatMapResponse(BaseModel):
 # --- Seat Locking (Screen 6) ---
 
 class SeatLockRequest(BaseModel):
-    seat_ids: List[UUID4]
+    seat_ids: Annotated[List[UUID4], Field(min_length=1, max_length=10)]
 
 
 class SeatLockResponse(BaseModel):

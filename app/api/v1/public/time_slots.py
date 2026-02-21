@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func as sqlfunc
+from sqlalchemy import func as sqlfunc, and_, or_
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -27,6 +27,7 @@ from app.schemas.seat import (
     HoldReleaseResponse,
 )
 from app.schemas.venue import HallSummary
+from app.utils.timeslots import deactivate_past_slots
 
 listing_slots_router = APIRouter(prefix="/listings", tags=["Time Slots"])
 slot_public_router = APIRouter(prefix="/time-slots", tags=["Time Slots"])
@@ -59,11 +60,26 @@ def get_listing_time_slots(
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    today = datetime.now(timezone.utc).date()
+    # Expire any past slots before returning results
+    deactivate_past_slots(db)
+
+    # Use local time — slot_date/start_time are stored as timezone-naive local values
+    now = datetime.now()
+    today = now.date()
+    current_time = now.time()
+
     query = db.query(TimeSlot).filter(
         TimeSlot.listing_id == listing_id,
         TimeSlot.is_active == True,
-        TimeSlot.slot_date >= today,
+        # Exclude slots that have already started:
+        # keep only future dates, or today's slots whose start_time is still ahead
+        or_(
+            TimeSlot.slot_date > today,
+            and_(
+                TimeSlot.slot_date == today,
+                TimeSlot.start_time >= current_time,
+            ),
+        ),
     )
     if date:
         query = query.filter(TimeSlot.slot_date == date)

@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import List, Optional
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -66,6 +66,20 @@ def _check_hall_overlap(
             detail=(
                 f"Hall is already occupied from {conflict.start_time} to {conflict.end_time} "
                 f"on {conflict.slot_date} (slot {conflict.id})"
+            ),
+        )
+
+
+def _check_not_in_past(slot_date: date, start_time: time) -> None:
+    """Raise 400 if the slot's date+time is in the past."""
+    now = datetime.now()
+    slot_dt = datetime.combine(slot_date, start_time)
+    if slot_dt < now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot create a time slot in the past "
+                f"({slot_date} {start_time} is before current time)."
             ),
         )
 
@@ -232,6 +246,9 @@ def create_time_slots(
 
     created = []
     for slot_data in data:
+        # Reject past date/time
+        _check_not_in_past(slot_data.slot_date, slot_data.start_time)
+
         # Validate hall belongs to the listing's venue
         if slot_data.hall_id:
             hall = (
@@ -287,6 +304,7 @@ def list_time_slots(
     listing_id: UUID,
     date: Optional[date] = None,
     hall_id: Optional[UUID] = None,
+    show_past: bool = Query(False, description="Include expired/past time slots (is_active=False)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
@@ -294,10 +312,14 @@ def list_time_slots(
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    query = db.query(TimeSlot).filter(
-        TimeSlot.listing_id == listing_id,
-        TimeSlot.is_active == True,
-    )
+    query = db.query(TimeSlot).filter(TimeSlot.listing_id == listing_id)
+
+    if not show_past:
+        query = query.filter(TimeSlot.is_active == True)
+    else:
+        # Past slots only — no point returning future active ones in history view
+        query = query.filter(TimeSlot.is_active == False)
+
     if date:
         query = query.filter(TimeSlot.slot_date == date)
     if hall_id:

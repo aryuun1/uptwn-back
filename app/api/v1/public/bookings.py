@@ -50,7 +50,7 @@ def _load_booking(booking_id: UUID, user_id, db: Session) -> Booking:
         .options(
             joinedload(Booking.listing).joinedload(Listing.title),
             joinedload(Booking.listing).joinedload(Listing.venue),
-            joinedload(Booking.time_slot),
+            joinedload(Booking.time_slot).joinedload(TimeSlot.hall),
             joinedload(Booking.seats).joinedload(BookingSeat.seat),
         )
         .filter(Booking.id == booking_id, Booking.user_id == user_id)
@@ -81,6 +81,8 @@ def _serialize_booking(booking: Booking) -> BookingSchema:
             slot_date=ts.slot_date,
             start_time=str(ts.start_time),
             end_time=str(ts.end_time) if ts.end_time else None,
+            hall_id=ts.hall_id,
+            hall_name=ts.hall.name if ts.hall else None,
         )
 
     seats_out = [
@@ -192,9 +194,15 @@ def create_booking(
         if slot.booked_count + quantity > slot.capacity:
             raise HTTPException(status_code=409, detail="Time slot is at full capacity")
 
-        # Compute total from seat prices
-        seats = db.query(Seat).filter(Seat.id.in_(seat_ids)).all()
-        total_amount = sum(float(s.price) for s in seats)
+        # Compute total: slot override → listing price → individual seat prices
+        unit_price = (
+            slot.price_override if slot.price_override else None
+        ) or listing.price
+        if unit_price is not None:
+            total_amount = float(unit_price) * quantity
+        else:
+            seats = db.query(Seat).filter(Seat.id.in_(seat_ids)).all()
+            total_amount = sum(float(s.price) for s in seats)
 
         booking_number = _generate_booking_number(db)
         booking = Booking(
@@ -315,7 +323,7 @@ def list_my_bookings(
         .options(
             joinedload(Booking.listing).joinedload(Listing.title),
             joinedload(Booking.listing).joinedload(Listing.venue),
-            joinedload(Booking.time_slot),
+            joinedload(Booking.time_slot).joinedload(TimeSlot.hall),
             joinedload(Booking.seats).joinedload(BookingSeat.seat),
         )
         .filter(Booking.user_id == current_user.id)

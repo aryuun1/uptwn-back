@@ -250,10 +250,14 @@ def add_listings(
         db.flush()  # get listing.id for time slots
 
         # Create inline time slots with overlap checking
-        from app.api.v1.admin.time_slots import _check_hall_overlap
+        from app.api.v1.admin.time_slots import _check_hall_overlap, _check_not_in_past
         from datetime import time as dt_time
 
         for ts in inline_slots:
+            # Reject past date/time
+            start_parsed = dt_time.fromisoformat(ts.start_time)
+            _check_not_in_past(ts.slot_date, start_parsed)
+
             # Validate hall belongs to this venue
             hall = (
                 db.query(Hall)
@@ -270,8 +274,8 @@ def add_listings(
                     detail=f"Hall {ts.hall_id} not found in venue '{venue.name}'",
                 )
 
-            # Parse time strings
-            start = dt_time.fromisoformat(ts.start_time)
+            # Parse time strings (start already parsed above for past-check)
+            start = start_parsed
             end = dt_time.fromisoformat(ts.end_time)
 
             # Check for overlap in this hall

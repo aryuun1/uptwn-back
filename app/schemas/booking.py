@@ -1,8 +1,8 @@
 
 from __future__ import annotations
 
-from typing import Optional, List
-from pydantic import BaseModel, UUID4
+from typing import Annotated, Optional, List
+from pydantic import BaseModel, Field, UUID4
 from decimal import Decimal
 from datetime import date, datetime
 
@@ -11,7 +11,7 @@ from datetime import date, datetime
 class BookingCreate(BaseModel):
     listing_id: UUID4
     time_slot_id: Optional[UUID4] = None
-    seat_ids: List[UUID4] = []
+    seat_ids: Annotated[List[UUID4], Field(max_length=10)] = []
     quantity: int = 1
     event_date: Optional[date] = None
     notes: Optional[str] = None
@@ -33,6 +33,8 @@ class BookingTimeSlotSummary(BaseModel):
     slot_date: date
     start_time: str
     end_time: Optional[str] = None
+    hall_id: Optional[UUID4] = None
+    hall_name: Optional[str] = None
 
 
 class BookingSeatResponse(BaseModel):

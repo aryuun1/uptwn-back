@@ -33,6 +33,7 @@ from app.api.v1.admin.time_slots import (
     hall_schedule_router,
     venue_schedule_router,
 )
+from app.api.v1.admin.bookings import router as admin_bookings_router
 
 api_router = APIRouter()
 
@@ -67,3 +68,4 @@ api_router.include_router(time_slot_router)
 api_router.include_router(slot_router)
 api_router.include_router(hall_schedule_router)
 api_router.include_router(venue_schedule_router)
+api_router.include_router(admin_bookings_router)
