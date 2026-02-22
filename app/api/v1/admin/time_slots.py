@@ -13,7 +13,6 @@ from app.models.venue import Venue
 from app.models.hall import Hall
 from app.models.title import Title
 from app.models.time_slot import TimeSlot
-from app.models.seat import Seat, SeatAvailability
 from app.schemas.time_slot import (
     TimeSlotCreate,
     TimeSlotUpdate,
@@ -277,18 +276,7 @@ def create_time_slots(
 
         slot = TimeSlot(listing_id=listing_id, **slot_data.model_dump())
         db.add(slot)
-        db.flush()  # populate slot.id before referencing it in SeatAvailability
         created.append(slot)
-
-        # Auto-seed SeatAvailability for every seat in the hall
-        if slot_data.hall_id:
-            seats = db.query(Seat).filter(Seat.hall_id == slot_data.hall_id).all()
-            for seat in seats:
-                db.add(SeatAvailability(
-                    time_slot_id=slot.id,
-                    seat_id=seat.id,
-                    status="available",
-                ))
 
     db.commit()
     for s in created:

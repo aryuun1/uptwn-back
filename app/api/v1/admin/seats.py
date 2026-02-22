@@ -1,6 +1,5 @@
 
 from uuid import UUID
-from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,8 +9,7 @@ from app.db.session import get_db
 from app.api.deps import get_current_admin_user, get_current_user
 from app.models.user import User
 from app.models.hall import Hall
-from app.models.seat import Seat, SeatAvailability
-from app.models.time_slot import TimeSlot
+from app.models.seat import Seat
 from app.schemas.seat import (
     SeatCreate,
     SeatUpdate,
@@ -22,35 +20,6 @@ from app.schemas.seat import (
 
 seats_router = APIRouter(prefix="/admin/halls", tags=["Admin - Seats"])
 seat_router = APIRouter(prefix="/admin/seats", tags=["Admin - Seats"])
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _future_active_slots(db: Session, hall_id: UUID) -> List[TimeSlot]:
-    """Return all future active time slots for a given hall."""
-    today = datetime.now(timezone.utc).date()
-    return (
-        db.query(TimeSlot)
-        .filter(
-            TimeSlot.hall_id == hall_id,
-            TimeSlot.is_active == True,
-            TimeSlot.slot_date >= today,
-        )
-        .all()
-    )
-
-
-def _seed_availability(db: Session, seat: Seat, slots: List[TimeSlot]):
-    """Insert SeatAvailability rows for a seat across a list of time slots."""
-    for slot in slots:
-        db.add(SeatAvailability(
-            time_slot_id=slot.id,
-            seat_id=seat.id,
-            status="available",
-        ))
 
 
 # ---------------------------------------------------------------------------
@@ -75,12 +44,6 @@ def create_seat(
 
     seat = Seat(hall_id=hall_id, **data.model_dump())
     db.add(seat)
-    db.flush()
-
-    # Seed availability for any existing future time slots
-    slots = _future_active_slots(db, hall_id)
-    _seed_availability(db, seat, slots)
-
     db.commit()
     db.refresh(seat)
     return seat
@@ -109,16 +72,11 @@ def bulk_create_seats(
     if not data.seats:
         raise HTTPException(status_code=400, detail="seats list cannot be empty")
 
-    # Load once — shared across all new seats
-    slots = _future_active_slots(db, hall_id)
-
     new_seats = []
     for seat_data in data.seats:
         seat = Seat(hall_id=hall_id, **seat_data.model_dump())
         db.add(seat)
-        db.flush()
         new_seats.append(seat)
-        _seed_availability(db, seat, slots)
 
     db.commit()
     return SeatBulkCreateResponse(created_count=len(new_seats), hall_id=hall_id)

@@ -119,16 +119,13 @@ def get_seat_map(
     if not hall:
         raise HTTPException(status_code=404, detail="Hall not found")
 
-    # Auto-release expired seat locks
+    # Auto-release expired seat locks (delete row — no row means available)
     now = datetime.now(timezone.utc)
     db.query(SeatAvailability).filter(
         SeatAvailability.time_slot_id == slot_id,
         SeatAvailability.status == "locked",
         SeatAvailability.locked_until < now,
-    ).update(
-        {"status": "available", "locked_by": None, "locked_until": None},
-        synchronize_session="fetch",
-    )
+    ).delete(synchronize_session="fetch")
     db.commit()
 
     # Fetch all seats in this hall, ordered for rendering
@@ -213,15 +210,12 @@ def lock_seats(
     if len(seats) != len(body.seat_ids):
         raise HTTPException(status_code=400, detail="One or more seats do not belong to this hall")
 
-    # Auto-release expired locks first
+    # Auto-release expired locks first (delete row — no row means available)
     db.query(SeatAvailability).filter(
         SeatAvailability.time_slot_id == slot_id,
         SeatAvailability.status == "locked",
         SeatAvailability.locked_until < now,
-    ).update(
-        {"status": "available", "locked_by": None, "locked_until": None},
-        synchronize_session="fetch",
-    )
+    ).delete(synchronize_session="fetch")
 
     # Check availability of requested seats
     avail_map = {
@@ -285,9 +279,7 @@ def release_seat_locks(
 
     released_ids = [a.seat_id for a in locked]
     for a in locked:
-        a.status = "available"
-        a.locked_by = None
-        a.locked_until = None
+        db.delete(a)
 
     db.commit()
     return SeatLockReleaseResponse(released_seats=released_ids)

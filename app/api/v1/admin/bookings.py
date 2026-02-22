@@ -45,8 +45,6 @@ def _serialize_admin_booking(booking: Booking) -> AdminBooking:
             slot_date=ts.slot_date,
             start_time=str(ts.start_time),
             end_time=str(ts.end_time) if ts.end_time else None,
-            hall_id=ts.hall_id,
-            hall_name=ts.hall.name if ts.hall else None,
         )
 
     seats_out = [
@@ -114,7 +112,7 @@ def list_all_bookings(
             joinedload(Booking.user),
             joinedload(Booking.listing).joinedload(Listing.title),
             joinedload(Booking.listing).joinedload(Listing.venue),
-            joinedload(Booking.time_slot).joinedload(TimeSlot.hall),
+            joinedload(Booking.time_slot),
             joinedload(Booking.seats).joinedload(BookingSeat.seat),
         )
     )
@@ -126,7 +124,7 @@ def list_all_bookings(
     if date:
         query = query.filter(Booking.event_date == date)
     if city:
-        query = query.filter(Listing.city.like(city))
+        query = query.filter(Listing.city.ilike(city))
     if status:
         query = query.filter(Booking.status == status)
 

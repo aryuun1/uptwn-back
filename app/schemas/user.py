@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     full_name: str
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    role: str
 
 
 # Properties to receive via API on creation (POST /auth/register)

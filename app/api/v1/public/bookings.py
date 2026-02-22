@@ -410,16 +410,13 @@ def cancel_booking(
     if listing:
         listing.booked_count = max(0, listing.booked_count - booking.quantity)
 
-    # Release seat availability
+    # Release seat availability (delete row — no row means available)
     seat_ids = [bs.seat_id for bs in booking.seats]
     if seat_ids:
         db.query(SeatAvailability).filter(
             SeatAvailability.time_slot_id == booking.time_slot_id,
             SeatAvailability.seat_id.in_(seat_ids),
-        ).update(
-            {"status": "available", "locked_by": None, "locked_until": None},
-            synchronize_session="fetch",
-        )
+        ).delete(synchronize_session="fetch")
 
     # Cancellation notification
     db.add(Notification(
