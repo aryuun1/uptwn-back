@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Optional, List
-from pydantic import BaseModel, Field, UUID4, field_validator
+from pydantic import BaseModel, Field, UUID4
 from decimal import Decimal
 from datetime import date, datetime
 
@@ -15,13 +15,6 @@ class BookingCreate(BaseModel):
     quantity: int = 1
     event_date: Optional[date] = None
     notes: Optional[str] = None
-
-    @field_validator("time_slot_id", mode="before")
-    @classmethod
-    def parse_empty_str_to_none(cls, v):
-        if v == "":
-            return None
-        return v
 
 
 # Nested response objects for booking responses
