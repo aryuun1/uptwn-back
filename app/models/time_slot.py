@@ -17,6 +17,8 @@ class TimeSlot(Base):
     capacity = Column(Integer, nullable=False)
     booked_count = Column(Integer, default=0)
     price_override = Column(DECIMAL(10, 2), nullable=True)
+    slot_type = Column(String(20), nullable=True)       # "lunch" | "dinner" — restaurants only
+    discount_percent = Column(DECIMAL(5, 2), nullable=True)  # e.g. 30.00 — restaurants only
     is_active = Column(Boolean, default=True)
 
     # Relationships

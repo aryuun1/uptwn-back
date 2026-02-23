@@ -21,6 +21,10 @@ class Booking(Base):
     notes = Column(Text, nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Restaurant-specific fields (null for movies/events)
+    party_size = Column(Integer, nullable=True)
+    booking_type = Column(String(20), nullable=True)       # "cover" | "reserve"
+    cover_charge_paid = Column(DECIMAL(10, 2), nullable=True)
 
     # Relationships
     user = relationship("User")

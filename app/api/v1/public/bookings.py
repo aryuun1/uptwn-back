@@ -1,5 +1,6 @@
 import random
 import string
+from decimal import Decimal
 from uuid import UUID
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from app.models.booking import Booking, BookingSeat, BookingHold
 from app.models.listing import Listing
 from app.models.time_slot import TimeSlot
 from app.models.seat import Seat, SeatAvailability
+from app.models.title import CategoryType
 from app.models.review_notification import Notification
 from app.schemas.booking import (
     BookingCreate,
@@ -112,6 +114,9 @@ def _serialize_booking(booking: Booking) -> BookingSchema:
         venue=venue_summary,
         time_slot=slot_summary,
         seats=seats_out,
+        party_size=booking.party_size,
+        booking_type=booking.booking_type,
+        cover_charge_paid=booking.cover_charge_paid,
     )
 
 
@@ -161,6 +166,11 @@ def create_booking(
             raise HTTPException(status_code=404, detail="Time slot not found or inactive")
 
     now = datetime.now(timezone.utc)
+    is_restaurant = (
+        listing.title is not None and
+        listing.title.category == CategoryType.restaurants
+    )
+    estimate = None  # only populated for restaurant bookings at creation time
 
     # -----------------------------------------------------------------------
     # Seat-based booking
@@ -237,23 +247,57 @@ def create_booking(
     # Capacity-based booking (no specific seats)
     # -----------------------------------------------------------------------
     else:
-        quantity = data.quantity
+        if is_restaurant:
+            # --- Restaurant: cover charge or reservation ---
+            if not data.party_size or data.party_size < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="party_size is required for restaurant bookings",
+                )
+            if data.booking_type not in ("cover", "reserve"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="booking_type must be 'cover' or 'reserve'",
+                )
 
-        # Determine unit price: slot override → listing price → 0
-        unit_price = float(
-            (slot.price_override if slot and slot.price_override else None)
-            or listing.price
-            or 0
-        )
-        total_amount = unit_price * quantity
+            # One booking = one table; slot full at capacity bookings
+            if slot and slot.booked_count + 1 > slot.capacity:
+                raise HTTPException(status_code=409, detail="This time slot is fully booked")
 
-        # Capacity check
-        if slot:
-            if slot.booked_count + quantity > slot.capacity:
-                raise HTTPException(status_code=409, detail="Not enough capacity in this slot")
-        elif listing.total_capacity is not None:
-            if listing.booked_count + quantity > listing.total_capacity:
-                raise HTTPException(status_code=409, detail="Listing is fully booked")
+            slot_discount = float(slot.discount_percent) if slot and slot.discount_percent else 0.0
+            if data.booking_type == "cover":
+                discount_pct = slot_discount
+                cover_charge = Decimal("100.00")
+            else:
+                discount_pct = 10.0
+                cover_charge = Decimal("0.00")
+
+            avg_per_person = float(listing.price) if listing.price else 0.0
+            estimate = Decimal(str(round(avg_per_person * data.party_size * (1 - discount_pct / 100), 2)))
+            quantity = 1
+            total_amount = float(cover_charge)
+            party_size = data.party_size
+            booking_type = data.booking_type
+
+        else:
+            # --- Standard capacity-based (events, general admission) ---
+            quantity = data.quantity
+            unit_price = float(
+                (slot.price_override if slot and slot.price_override else None)
+                or listing.price
+                or 0
+            )
+            total_amount = unit_price * quantity
+            party_size = None
+            booking_type = None
+            cover_charge = None
+
+            if slot:
+                if slot.booked_count + quantity > slot.capacity:
+                    raise HTTPException(status_code=409, detail="Not enough capacity in this slot")
+            elif listing.total_capacity is not None:
+                if listing.booked_count + quantity > listing.total_capacity:
+                    raise HTTPException(status_code=409, detail="Listing is fully booked")
 
         event_date = data.event_date or (slot.slot_date if slot else None)
         booking_number = _generate_booking_number(db)
@@ -267,6 +311,9 @@ def create_booking(
             status="confirmed",
             event_date=event_date,
             notes=data.notes,
+            party_size=party_size,
+            booking_type=booking_type,
+            cover_charge_paid=cover_charge if is_restaurant else None,
         )
         db.add(booking)
         db.flush()
@@ -299,7 +346,10 @@ def create_booking(
 
     # Reload fully for response
     full_booking = _load_booking(booking.id, current_user.id, db)
-    return _serialize_booking(full_booking)
+    result = _serialize_booking(full_booking)
+    if is_restaurant and estimate is not None:
+        result.estimate = estimate
+    return result
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import List, Optional
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timedelta, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -17,6 +17,8 @@ from app.schemas.time_slot import (
     TimeSlotCreate,
     TimeSlotUpdate,
     TimeSlotWithHall as TimeSlotSchema,
+    BulkTimeSlotCreate,
+    BulkCreateResult,
     HallScheduleEntry,
     HallScheduleResponse,
 )
@@ -282,6 +284,108 @@ def create_time_slots(
     for s in created:
         db.refresh(s)
     return created
+
+
+_DAY_MAP = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+@router.post(
+    "/{listing_id}/time-slots/bulk",
+    response_model=BulkCreateResult,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_bulk_time_slots(
+    listing_id: UUID,
+    data: BulkTimeSlotCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    """
+    Generate time slots across a date range in one shot.
+    Works for all categories — movies, events, restaurants.
+    Past dates and already-existing slots are silently skipped.
+    """
+    listing = db.query(Listing).filter(Listing.id == listing_id).first()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if data.date_from > data.date_to:
+        raise HTTPException(status_code=400, detail="date_from must be before or equal to date_to")
+
+    target_weekdays = set()
+    for d in data.days:
+        wday = _DAY_MAP.get(d.lower())
+        if wday is None:
+            raise HTTPException(status_code=400, detail=f"Invalid day '{d}'. Use: mon tue wed thu fri sat sun")
+        target_weekdays.add(wday)
+
+    # Pre-validate all halls once (not per-date)
+    validated_halls = {}
+    for slot_def in data.slots:
+        if slot_def.hall_id and slot_def.hall_id not in validated_halls:
+            hall = db.query(Hall).filter(
+                Hall.id == slot_def.hall_id,
+                Hall.venue_id == listing.venue_id,
+                Hall.is_active == True,  # noqa: E712
+            ).first()
+            if not hall:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Hall {slot_def.hall_id} not found in this venue",
+                )
+            validated_halls[slot_def.hall_id] = hall
+
+    created_count = 0
+    skipped_count = 0
+    now = datetime.now()
+
+    current_date = data.date_from
+    while current_date <= data.date_to:
+        if current_date.weekday() in target_weekdays:
+            for slot_def in data.slots:
+                # Skip past slots silently
+                if datetime.combine(current_date, slot_def.start_time) < now:
+                    skipped_count += 1
+                    continue
+
+                # Skip if an active slot already exists for this listing/date/start_time
+                exists = db.query(TimeSlot).filter(
+                    TimeSlot.listing_id == listing_id,
+                    TimeSlot.slot_date == current_date,
+                    TimeSlot.start_time == slot_def.start_time,
+                    TimeSlot.is_active == True,  # noqa: E712
+                ).first()
+                if exists:
+                    skipped_count += 1
+                    continue
+
+                # Hall overlap check (movies/events only)
+                if slot_def.hall_id:
+                    _check_hall_overlap(
+                        db,
+                        hall_id=slot_def.hall_id,
+                        slot_date=current_date,
+                        start_time=slot_def.start_time,
+                        end_time=slot_def.end_time,
+                    )
+
+                db.add(TimeSlot(
+                    listing_id=listing_id,
+                    hall_id=slot_def.hall_id,
+                    slot_date=current_date,
+                    start_time=slot_def.start_time,
+                    end_time=slot_def.end_time,
+                    capacity=slot_def.capacity,
+                    price_override=slot_def.price_override,
+                    slot_type=slot_def.slot_type,
+                    discount_percent=slot_def.discount_percent,
+                ))
+                created_count += 1
+
+        current_date += timedelta(days=1)
+
+    db.commit()
+    return BulkCreateResult(created=created_count, skipped=skipped_count)
 
 
 @router.get(

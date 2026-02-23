@@ -7,14 +7,16 @@ from datetime import date, time
 from app.schemas.venue import HallSummary
 
 
-# Time Slot — Create (each item in the bulk array)
+# Time Slot — Create (each item in the array)
 class TimeSlotCreate(BaseModel):
     slot_date: date
     start_time: time
     end_time: time
     capacity: int
     price_override: Optional[Decimal] = None
-    hall_id: UUID4
+    hall_id: Optional[UUID4] = None          # required for movies/events, omit for restaurants
+    slot_type: Optional[str] = None          # "lunch" | "dinner" — restaurants only
+    discount_percent: Optional[Decimal] = None  # restaurants only
 
 
 # Time Slot — Update (admin PATCH /admin/time-slots/{id})
@@ -25,6 +27,8 @@ class TimeSlotUpdate(BaseModel):
     capacity: Optional[int] = None
     price_override: Optional[Decimal] = None
     hall_id: Optional[UUID4] = None
+    slot_type: Optional[str] = None
+    discount_percent: Optional[Decimal] = None
     is_active: Optional[bool] = None
 
 
@@ -39,6 +43,8 @@ class TimeSlot(BaseModel):
     capacity: int
     booked_count: int = 0
     price_override: Optional[Decimal] = None
+    slot_type: Optional[str] = None
+    discount_percent: Optional[Decimal] = None
     is_active: bool = True
 
     class Config:
@@ -91,3 +97,26 @@ class HallScheduleResponse(BaseModel):
     hall_name: str
     date: date
     slots: List[HallScheduleEntry]
+
+
+# Bulk time slot generation — one slot definition repeated across a date range
+class BulkSlotDefinition(BaseModel):
+    start_time: time
+    end_time: time
+    capacity: int
+    hall_id: Optional[UUID4] = None          # movies/events
+    slot_type: Optional[str] = None          # "lunch" | "dinner" — restaurants
+    price_override: Optional[Decimal] = None
+    discount_percent: Optional[Decimal] = None  # restaurants
+
+
+class BulkTimeSlotCreate(BaseModel):
+    date_from: date
+    date_to: date
+    days: List[str]  # e.g. ["mon", "wed", "fri"] or ["sat", "sun"]
+    slots: List[BulkSlotDefinition]
+
+
+class BulkCreateResult(BaseModel):
+    created: int
+    skipped: int

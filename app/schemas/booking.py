@@ -15,6 +15,9 @@ class BookingCreate(BaseModel):
     quantity: int = 1
     event_date: Optional[date] = None
     notes: Optional[str] = None
+    # Restaurant-specific (ignored for movies/events)
+    party_size: Optional[int] = None
+    booking_type: Optional[str] = None  # "cover" | "reserve"
 
 
 # Nested response objects for booking responses
@@ -62,6 +65,11 @@ class Booking(BaseModel):
     venue: Optional[BookingVenueSummary] = None
     time_slot: Optional[BookingTimeSlotSummary] = None
     seats: List[BookingSeatResponse] = []
+    # Restaurant-specific (null for movies/events)
+    party_size: Optional[int] = None
+    booking_type: Optional[str] = None
+    cover_charge_paid: Optional[Decimal] = None
+    estimate: Optional[Decimal] = None  # only populated at booking creation, not stored
 
     class Config:
         from_attributes = True
