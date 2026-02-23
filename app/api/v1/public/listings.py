@@ -12,6 +12,27 @@ from app.schemas.title import ListingWithVenue
 router = APIRouter(prefix="/listings", tags=["Listings"])
 
 
+@router.get("/cities", response_model=List[str])
+def list_cities(
+    category: Optional[CategoryType] = None,
+    db: Session = Depends(get_db),
+):
+    """Returns distinct cities that have at least one active listing."""
+    query = (
+        db.query(Listing.city)
+        .join(Title, Title.id == Listing.title_id)
+        .filter(
+            Listing.status == "active",
+            Title.is_active == True,
+            Listing.city != None,  # noqa: E711
+        )
+        .distinct()
+    )
+    if category:
+        query = query.filter(Title.category == category)
+    return sorted([row.city for row in query.all()])
+
+
 @router.get("/", response_model=List[ListingWithVenue])
 def list_listings(
     category: Optional[CategoryType] = None,
@@ -30,7 +51,7 @@ def list_listings(
     if category:
         query = query.filter(Title.category == category)
     if city:
-        query = query.filter(Listing.city.ilike(city))
+        query = query.filter(Listing.city.ilike(f"%{city}%"))
 
     return query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
 

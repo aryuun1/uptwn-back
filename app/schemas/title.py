@@ -39,6 +39,7 @@ class TitleCreate(BaseModel):
     tags: Optional[List[str]] = None
     meta: Optional[Dict[str, Any]] = None
     is_featured: bool = False
+    scope: str = "local"  # "local" | "national"
 
 
 # Title — Update (admin PATCH /admin/titles/{id})
@@ -52,6 +53,8 @@ class TitleUpdate(BaseModel):
     tags: Optional[List[str]] = None
     meta: Optional[Dict[str, Any]] = None
     is_featured: Optional[bool] = None
+    is_active: Optional[bool] = None
+    scope: Optional[str] = None  # "local" | "national"
 
 
 # Title — Full response (GET /titles/{slug})
@@ -70,6 +73,7 @@ class Title(BaseModel):
     rating_count: int
     is_featured: bool
     is_active: bool
+    scope: str
     created_at: datetime
     updated_at: Optional[datetime] = None
     images: List[TitleImage] = []
@@ -93,6 +97,7 @@ class TitleBrowseCard(BaseModel):
     is_featured: bool
     tags: Optional[List[str]] = None
     meta: Optional[Dict[str, Any]] = None
+    scope: str = "local"
     min_price: Optional[Decimal] = None
     venue_count: int = 0
     cities: List[str] = []

@@ -3,7 +3,7 @@ from typing import List, Optional
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
@@ -31,15 +31,23 @@ def list_titles(
         query = query.filter(Title.category == category)
     if featured is not None:
         query = query.filter(Title.is_featured == featured)
+        # Without city context, local featured events have no meaningful scope —
+        # only national ones should surface globally
+        if featured and not city:
+            query = query.filter(Title.scope == "national")
     if search:
         query = query.filter(Title.title.ilike(f"%{search}%"))
 
-    # If filtering by city, only return titles that have an active listing in that city
+    # Local titles: only show if they have an active listing in the user's city
+    # National titles: always show regardless of city context
     if city:
         query = query.filter(
-            Title.id.in_(
-                db.query(Listing.title_id)
-                .filter(Listing.city.ilike(city), Listing.status == "active")
+            or_(
+                Title.scope == "national",
+                Title.id.in_(
+                    db.query(Listing.title_id)
+                    .filter(Listing.city.ilike(city), Listing.status == "active")
+                ),
             )
         )
 
@@ -66,6 +74,7 @@ def list_titles(
             is_featured=t.is_featured,
             tags=t.tags,
             meta=t.meta,
+            scope=t.scope,
             min_price=min(prices) if prices else None,
             venue_count=len(active_listings),
             cities=sorted(cities),

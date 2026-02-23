@@ -1,6 +1,6 @@
 
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.api.deps import get_current_admin_user
 from app.models.user import User
-from app.models.title import Title, TitleImage
+from app.models.title import Title, TitleImage, CategoryType
 from app.models.listing import Listing
 from app.models.venue import Venue
 from app.models.time_slot import TimeSlot
@@ -74,6 +74,45 @@ def _expire_stale_listings(db: Session):
 # ---------------------------------------------------------------------------
 
 
+@router.get("/", response_model=List[TitleSchema])
+def list_titles(
+    is_active: Optional[bool] = True,
+    category: Optional[CategoryType] = None,
+    city: Optional[str] = None,
+    search: Optional[str] = None,
+    sort: Optional[str] = Query("newest", pattern="^(newest|oldest)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    query = db.query(Title)
+    if is_active is not None:
+        query = query.filter(Title.is_active == is_active)
+    if category:
+        query = query.filter(Title.category == category)
+    if search:
+        query = query.filter(Title.title.ilike(f"%{search}%"))
+    if city:
+        query = query.filter(
+            Title.id.in_(
+                db.query(Listing.title_id).filter(Listing.city.ilike(f"%{city}%"))
+            )
+        )
+    order = Title.created_at.asc() if sort == "oldest" else Title.created_at.desc()
+    return query.order_by(order).all()
+
+
+@router.get("/{id}", response_model=TitleSchema)
+def get_title(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    title = db.query(Title).filter(Title.id == id).first()
+    if not title:
+        raise HTTPException(status_code=404, detail="Title not found")
+    return title
+
+
 @router.post("/", response_model=TitleSchema, status_code=status.HTTP_201_CREATED)
 def create_title(
     data: TitleCreate,
@@ -99,7 +138,7 @@ def update_title(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    title = db.query(Title).filter(Title.id == id, Title.is_active == True).first()
+    title = db.query(Title).filter(Title.id == id).first()
     if not title:
         raise HTTPException(status_code=404, detail="Title not found")
 
@@ -122,13 +161,25 @@ def delete_title(
         raise HTTPException(status_code=404, detail="Title not found")
 
     title.is_active = False
+
+    # Collect listing IDs to cascade down to time slots
+    listing_ids = [row.id for row in db.query(Listing.id).filter(Listing.title_id == id).all()]
+
+    # Cascade: deactivate all time slots under those listings (bookings are left untouched)
+    if listing_ids:
+        db.query(TimeSlot).filter(
+            TimeSlot.listing_id.in_(listing_ids),
+            TimeSlot.is_active == True,  # noqa: E712
+        ).update({"is_active": False}, synchronize_session="fetch")
+
     # Cascade: deactivate all linked listings
     db.query(Listing).filter(Listing.title_id == id).update({"status": "inactive"})
+
     db.commit()
     return {
         "id": str(id),
         "is_active": False,
-        "message": "Title soft-deleted. All linked listings deactivated.",
+        "message": "Title soft-deleted. All linked listings and time slots deactivated.",
     }
 
 

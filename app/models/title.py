@@ -31,6 +31,7 @@ class Title(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     is_active = Column(Boolean, default=True)
+    scope = Column(String(20), default="local")  # "local" | "national"
 
     # Relationships
     images = relationship("TitleImage", back_populates="title", cascade="all, delete-orphan")
