@@ -37,7 +37,7 @@ class TimeSlot(BaseModel):
     id: UUID4
     listing_id: UUID4
     hall_id: Optional[UUID4] = None
-    slot_date: date
+    slot_date: Optional[date] = None   # NULL for reusable restaurant slots
     start_time: time
     end_time: Optional[time] = None
     capacity: int

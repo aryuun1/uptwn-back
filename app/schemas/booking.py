@@ -33,7 +33,7 @@ class BookingVenueSummary(BaseModel):
 
 
 class BookingTimeSlotSummary(BaseModel):
-    slot_date: date
+    slot_date: Optional[date] = None   # NULL for reusable restaurant slots
     start_time: str
     end_time: Optional[str] = None
     hall_id: Optional[UUID4] = None

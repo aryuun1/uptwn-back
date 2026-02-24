@@ -17,6 +17,12 @@ from app.api.v1.public.time_slots import (
 # Public — bookings
 from app.api.v1.public.bookings import router as bookings_router
 
+# Public — restaurant slots & bookings
+from app.api.v1.public.restaurant_slots import (
+    router as public_restaurant_slots_router,
+    booking_router as public_restaurant_booking_router,
+)
+
 # Public — user profile & notifications
 from app.api.v1.public.me import router as me_router
 
@@ -35,6 +41,10 @@ from app.api.v1.admin.time_slots import (
 )
 from app.api.v1.admin.bookings import router as admin_bookings_router
 from app.api.v1.admin.seat_availability import router as seat_availability_router
+from app.api.v1.admin.restaurant_slots import (
+    listing_router as admin_restaurant_listing_router,
+    slot_router as admin_restaurant_slot_router,
+)
 
 api_router = APIRouter()
 
@@ -51,6 +61,10 @@ api_router.include_router(slot_public_router)
 
 # --- Public: bookings ---
 api_router.include_router(bookings_router)
+
+# --- Public: restaurant slots & bookings ---
+api_router.include_router(public_restaurant_slots_router)
+api_router.include_router(public_restaurant_booking_router)
 
 # --- Public: profile & notifications ---
 api_router.include_router(me_router)
@@ -71,3 +85,5 @@ api_router.include_router(hall_schedule_router)
 api_router.include_router(venue_schedule_router)
 api_router.include_router(admin_bookings_router)
 api_router.include_router(seat_availability_router)
+api_router.include_router(admin_restaurant_listing_router)
+api_router.include_router(admin_restaurant_slot_router)

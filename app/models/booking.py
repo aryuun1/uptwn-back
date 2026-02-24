@@ -50,6 +50,8 @@ class BookingHold(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     time_slot_id = Column(UUID(as_uuid=True), ForeignKey("time_slots.id"), nullable=False)
+    slot_date = Column(Date, nullable=True, index=True)   # event date for restaurant holds
+    party_size = Column(Integer, nullable=True)            # restaurant holds only
     quantity = Column(Integer, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

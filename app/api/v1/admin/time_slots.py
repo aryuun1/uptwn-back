@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.listing import Listing
 from app.models.venue import Venue
 from app.models.hall import Hall
-from app.models.title import Title
+from app.models.title import Title, CategoryType
 from app.models.time_slot import TimeSlot
 from app.schemas.time_slot import (
     TimeSlotCreate,
@@ -241,9 +241,25 @@ def create_time_slots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    listing = db.query(Listing).filter(Listing.id == listing_id).first()
+    listing = (
+        db.query(Listing)
+        .join(Title, Title.id == Listing.title_id)
+        .filter(Listing.id == listing_id)
+        .first()
+    )
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.title.category == CategoryType.restaurants:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Date-specific time slots cannot be created for restaurant listings. "
+                "Use POST /admin/listings/{listing_id}/restaurant-slots to create "
+                "reusable (date-less) slots instead — a handful of rows covers every "
+                "future date without any DB bloat."
+            ),
+        )
 
     created = []
     for slot_data in data:
@@ -305,9 +321,25 @@ def create_bulk_time_slots(
     Works for all categories — movies, events, restaurants.
     Past dates and already-existing slots are silently skipped.
     """
-    listing = db.query(Listing).filter(Listing.id == listing_id).first()
+    listing = (
+        db.query(Listing)
+        .join(Title, Title.id == Listing.title_id)
+        .filter(Listing.id == listing_id)
+        .first()
+    )
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.title.category == CategoryType.restaurants:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Bulk date-specific slot creation is not allowed for restaurant listings. "
+                "Use POST /admin/listings/{listing_id}/restaurant-slots to create "
+                "reusable (date-less) slots — a single set of ~10 rows covers every "
+                "future date without creating hundreds of rows per listing."
+            ),
+        )
 
     if data.date_from > data.date_to:
         raise HTTPException(status_code=400, detail="date_from must be before or equal to date_to")
