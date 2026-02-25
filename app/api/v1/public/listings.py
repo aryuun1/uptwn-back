@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.listing import Listing
 from app.models.title import Title, CategoryType
 from app.schemas.title import ListingWithVenue
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter(prefix="/listings", tags=["Listings"])
 
@@ -33,11 +34,11 @@ def list_cities(
     return sorted([row.city for row in query.all()])
 
 
-@router.get("/", response_model=List[ListingWithVenue])
+@router.get("/", response_model=PaginatedResponse[ListingWithVenue])
 def list_listings(
     category: Optional[CategoryType] = None,
     city: Optional[str] = None,
-    skip: int = Query(0, ge=0),
+    page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
@@ -53,7 +54,17 @@ def list_listings(
     if city:
         query = query.filter(Listing.city.ilike(f"%{city}%"))
 
-    return query.order_by(Listing.created_at.desc()).offset(skip).limit(limit).all()
+    query = query.order_by(Listing.created_at.desc())
+    total = query.count()
+    listings = query.offset((page - 1) * limit).limit(limit).all()
+
+    return PaginatedResponse(
+        data=listings,
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=-(-total // limit) if total else 0,
+    )
 
 
 @router.get("/{id}", response_model=ListingWithVenue)

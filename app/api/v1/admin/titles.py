@@ -23,6 +23,7 @@ from app.schemas.title import (
     ListingUpdate,
     Listing as ListingSchema,
 )
+from app.schemas.common import PaginatedResponse
 from app.utils.slug import make_unique_slug
 
 router = APIRouter(prefix="/admin/titles", tags=["Admin - Titles"])
@@ -74,13 +75,15 @@ def _expire_stale_listings(db: Session):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/", response_model=List[TitleSchema])
+@router.get("/", response_model=PaginatedResponse[TitleSchema])
 def list_titles(
     is_active: Optional[bool] = True,
     category: Optional[CategoryType] = None,
     city: Optional[str] = None,
     search: Optional[str] = None,
     sort: Optional[str] = Query("newest", pattern="^(newest|oldest)$"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
@@ -98,7 +101,18 @@ def list_titles(
             )
         )
     order = Title.created_at.asc() if sort == "oldest" else Title.created_at.desc()
-    return query.order_by(order).all()
+    query = query.order_by(order)
+
+    total = query.count()
+    titles = query.offset((page - 1) * limit).limit(limit).all()
+
+    return PaginatedResponse(
+        data=titles,
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=-(-total // limit) if total else 0,
+    )
 
 
 @router.get("/{id}", response_model=TitleSchema)
