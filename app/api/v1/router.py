@@ -40,6 +40,7 @@ from app.api.v1.admin.time_slots import (
     venue_schedule_router,
 )
 from app.api.v1.admin.bookings import router as admin_bookings_router
+from app.api.v1.admin.revenue import router as revenue_router
 from app.api.v1.admin.seat_availability import router as seat_availability_router
 from app.api.v1.admin.restaurant_slots import (
     listing_router as admin_restaurant_listing_router,
@@ -84,6 +85,7 @@ api_router.include_router(slot_router)
 api_router.include_router(hall_schedule_router)
 api_router.include_router(venue_schedule_router)
 api_router.include_router(admin_bookings_router)
+api_router.include_router(revenue_router)
 api_router.include_router(seat_availability_router)
 api_router.include_router(admin_restaurant_listing_router)
 api_router.include_router(admin_restaurant_slot_router)
