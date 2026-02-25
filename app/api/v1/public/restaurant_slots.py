@@ -90,18 +90,23 @@ def get_restaurant_slots(
         raise HTTPException(status_code=404, detail="Listing not found")
 
     now = datetime.now(timezone.utc)
+    now_local = datetime.now()
 
     # Reusable slots have slot_date = NULL
-    slots = (
+    query = (
         db.query(TimeSlot)
         .filter(
             TimeSlot.listing_id == listing_id,
             TimeSlot.slot_date == None,  # noqa: E711
             TimeSlot.is_active == True,  # noqa: E712
         )
-        .order_by(TimeSlot.slot_type, TimeSlot.start_time)
-        .all()
     )
+
+    # If the requested date is today, exclude slots whose start_time has already passed
+    if date == now_local.date():
+        query = query.filter(TimeSlot.start_time > now_local.time())
+
+    slots = query.order_by(TimeSlot.slot_type, TimeSlot.start_time).all()
 
     # Group by slot_type
     groups: dict[str, list[RestaurantSlotWindow]] = {}
@@ -244,29 +249,30 @@ def create_restaurant_booking(
         )
 
     # -----------------------------------------------------------------------
-    # Reserve → BookingHold (expires at slot end_time on event_date)
+    # Reserve → confirmed Booking with no cover charge
     # -----------------------------------------------------------------------
-    from datetime import datetime as dt
-
-    hold_expires = dt.combine(data.event_date, slot.end_time).replace(
-        tzinfo=timezone.utc
-    )
-
-    hold = BookingHold(
+    booking_number = _generate_booking_number(db)
+    booking = Booking(
         user_id=current_user.id,
+        listing_id=listing.id,
         time_slot_id=slot.id,
-        slot_date=data.event_date,
-        party_size=data.party_size,
+        booking_number=booking_number,
         quantity=1,
-        expires_at=hold_expires,
+        total_amount=0,
+        status="confirmed",
+        event_date=data.event_date,
+        notes=data.notes,
+        party_size=data.party_size,
+        booking_type=data.booking_type,
+        cover_charge_paid=Decimal("0.00"),
     )
-    db.add(hold)
+    db.add(booking)
     db.commit()
-    db.refresh(hold)
+    db.refresh(booking)
 
     return RestaurantBookingResponse(
-        type="hold",
-        id=hold.id,
+        type="booking",
+        id=booking.id,
         listing_id=listing.id,
         time_slot_id=slot.id,
         slot_type=slot.slot_type,
@@ -276,10 +282,10 @@ def create_restaurant_booking(
         party_size=data.party_size,
         booking_type=data.booking_type,
         discount_percent=slot.discount_percent,
-        cover_charge_paid=cover_charge,
+        cover_charge_paid=Decimal("0.00"),
         estimate=estimate,
-        status="reserved",
-        booking_number=None,
-        expires_at=hold_expires,
-        created_at=hold.created_at,
+        status="confirmed",
+        booking_number=booking_number,
+        expires_at=None,
+        created_at=booking.created_at,
     )
