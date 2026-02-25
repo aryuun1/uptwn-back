@@ -82,6 +82,19 @@ class Title(BaseModel):
         from_attributes = True
 
 
+# Title — Search result (GET /titles/search typeahead)
+class TitleSearchResult(BaseModel):
+    slug: str
+    title: str
+    category: CategoryType
+    image_url: Optional[str] = None
+    cities: List[str] = []
+    min_price: Optional[Decimal] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Title — Browse card (GET /titles list items, Screen 4)
 # Includes computed fields for the browse grid
 class TitleBrowseCard(BaseModel):

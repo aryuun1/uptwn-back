@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.session import get_db
 from app.models.title import Title, CategoryType
 from app.models.listing import Listing
-from app.schemas.title import TitleBrowseCard, TitleDetail
+from app.schemas.title import TitleBrowseCard, TitleDetail, TitleSearchResult
 from app.schemas.common import PaginatedResponse
 
 router = APIRouter(prefix="/titles", tags=["Titles"])
@@ -88,6 +88,52 @@ def list_titles(
         limit=limit,
         total_pages=-(-total // limit) if total else 0,
     )
+
+
+@router.get("/search", response_model=List[TitleSearchResult])
+def search_titles(
+    q: str = Query(..., min_length=1, description="Search query"),
+    limit: int = Query(10, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    """
+    Global title search for the home page search bar.
+    Returns lightweight results regardless of city — any title
+    with at least one active listing is eligible.
+    Frontend uses slug to navigate straight to the title page.
+    """
+    titles = (
+        db.query(Title)
+        .filter(
+            Title.is_active == True,
+            Title.title.ilike(f"%{q}%"),
+            Title.id.in_(
+                db.query(Listing.title_id).filter(Listing.status == "active")
+            ),
+        )
+        .order_by(Title.is_featured.desc(), Title.rating.desc())
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for t in titles:
+        active_listings = [l for l in t.listings if l.status == "active"]
+        prices = [l.price for l in active_listings if l.price is not None]
+        cities = sorted({l.city for l in active_listings if l.city})
+
+        results.append(
+            TitleSearchResult(
+                slug=t.slug,
+                title=t.title,
+                category=t.category,
+                image_url=t.image_url,
+                cities=cities,
+                min_price=min(prices) if prices else None,
+            )
+        )
+
+    return results
 
 
 @router.get("/{slug}", response_model=TitleDetail)

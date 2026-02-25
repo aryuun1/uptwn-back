@@ -2,7 +2,7 @@
 from typing import Optional, List
 from pydantic import BaseModel, UUID4
 from decimal import Decimal
-from datetime import date, time
+from datetime import date, time, datetime
 
 from app.schemas.venue import HallSummary
 
@@ -120,3 +120,81 @@ class BulkTimeSlotCreate(BaseModel):
 class BulkCreateResult(BaseModel):
     created: int
     skipped: int
+
+
+# ---------------------------------------------------------------------------
+# Bulk Listing Upload — cross-venue, cross-hall, cross-date in one request
+# ---------------------------------------------------------------------------
+
+class BulkListingSlotInput(BaseModel):
+    """One timeslot row inside a bulk-listing entry."""
+    hall_id: UUID4
+    slot_date: date
+    start_time: time
+    end_time: time
+    capacity: int
+    price_override: Optional[Decimal] = None
+    slot_type: Optional[str] = None          # "lunch" | "dinner" — not for cinemas
+    discount_percent: Optional[Decimal] = None
+
+
+class BulkListingEntry(BaseModel):
+    """One venue/cinema row in the bulk upload modal."""
+    venue_id: UUID4
+    price: Optional[Decimal] = None
+    currency: str = "INR"
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
+    total_capacity: Optional[int] = None
+    slots: List[BulkListingSlotInput]
+
+
+class BulkListingCreate(BaseModel):
+    """
+    Request body for POST /admin/titles/{title_id}/bulk-listings.
+
+    on_conflict behaviour:
+      "skip"  — conflicting slots are silently skipped; everything else is committed.
+      "fail"  — if ANY hall conflict or validation error is found the entire
+                request is rejected (HTTP 409) with full conflict details so the
+                admin can correct the modal and resubmit.
+    """
+    entries: List[BulkListingEntry]
+    on_conflict: str = "skip"   # "skip" | "fail"
+
+
+# --- Response models ---
+
+class SlotBulkResult(BaseModel):
+    hall_id: UUID4
+    hall_name: str
+    slot_date: date
+    start_time: time
+    end_time: time
+    status: str                          # "created" | "conflict" | "past" | "duplicate"
+    slot_id: Optional[UUID4] = None      # populated when status == "created"
+    conflict_detail: Optional[str] = None
+
+
+class ListingBulkResult(BaseModel):
+    venue_id: UUID4
+    venue_name: str
+    city: str
+    listing_status: str                  # "created" | "skipped"
+    listing_id: Optional[UUID4] = None
+    skip_reason: Optional[str] = None
+    slots: List[SlotBulkResult] = []
+
+
+class BulkListingSummary(BaseModel):
+    total_entries: int
+    listings_created: int
+    listings_skipped: int
+    slots_created: int
+    slots_skipped: int
+    conflict_count: int
+
+
+class BulkListingResponse(BaseModel):
+    summary: BulkListingSummary
+    results: List[ListingBulkResult]

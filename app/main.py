@@ -13,16 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 async def _slot_cleanup_loop() -> None:
-    """Background task: deactivate past time slots every 60 seconds."""
-    from app.utils.timeslots import deactivate_past_slots
+    """Background task: deactivate past time slots and expire finished event listings every 60 seconds."""
+    from app.utils.timeslots import deactivate_past_slots, expire_past_event_listings
 
     while True:
         try:
             db = SessionLocal()
             try:
-                count = deactivate_past_slots(db)
-                if count:
-                    logger.info("Deactivated %d past time slot(s).", count)
+                slots = deactivate_past_slots(db)
+                if slots:
+                    logger.info("Deactivated %d past time slot(s).", slots)
+
+                expired = expire_past_event_listings(db)
+                if expired:
+                    logger.info("Expired %d past event listing(s).", expired)
             finally:
                 db.close()
         except Exception:
